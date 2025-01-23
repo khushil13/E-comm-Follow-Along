@@ -1,55 +1,81 @@
-import express from "express";
-import mongoose from "mongoose";
-import userModel from "./model/user.model.js";
-const app = express();
-const PORT = 8080;
+const express = require("express");
+const mongoose = require("mongoose");
+const { userModel } = require("./model/user.model");
+const multer = require("multer");
+const fs = require("fs");
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
+
+let app = express();
 
 app.use(express.json());
+app.use(cors());
 
+// MongoDB connection function
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(
+    const connect = await mongoose.connect(
       "mongodb+srv://choprakhushil13:1rfebIFKUYUBCiDe@cluster0.nhg4l.mongodb.net/ecom_db",
       {
         useNewUrlParser: true,
         useUnifiedTopology: true,
-        bufferCommands: false,
-        serverSelectionTimeoutMS: 30000,
       }
     );
-    console.log(`MongoDB connected: ${conn.connection.host}`);
+    console.log("MongoDB connected");
   } catch (error) {
-    console.error(`MongoDB connection error: ${error.message}`);
-    process.exit(1); // Exit the process on connection failure
+    console.error("Error connecting to MongoDB:", error);
   }
 };
 
 connectDB();
 
-app.get("/", async (req, res) => {
+app.get("/home", (req, res) => {
+  res.send("<h1>Hello, welcome to the Home route!</h1>");
+});
+
+app.listen(7000, () => {
+  console.log("Server running on port 7000");
+});
+
+// Create a user
+app.post("/create", async (req, res) => {
+  let { name, email, password } = req.body;
+
   try {
-    res.send("Hello");
+    const existingUser = await userModel.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already registered" });
+    }
+
+    const hashedpass = await bcrypt.hash(password, 10);
+    const userDetails = { name, password: hashedpass, email };
+
+    const newuser = new userModel(userDetails);
+    await newuser.save();
+    res
+      .status(201)
+      .json({ message: "User created successfully", user: newuser });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching users", error });
+    console.error(error);
+    res.status(500).json({ message: "Failed to create user", error });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+//login  user
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
 
-app.post("/create", async (req, res) => {
-  const { name, email, password } = req.body;
+  const user = await userModel.findOne({ name: username });
+  if (!user) {
+    return res.status(400).json({ message: "User not found" });
+  }
 
-  try {
-    let new_user = new userModel({ name, email, password });
-    await new_user.save();
-    res.json({
-      message: "User saved successfully",
-    });
-  } catch (error) {
-    console.error("Error saving user:", error.message);
-    res.status(500).send({ error: error.message });
+  const matchpass = await bcrypt.compare(password, user.password);
+
+  if (matchpass) {
+    res.status(200).json({ message: "Login successful", user });
+  } else {
+    res.status(400).json({ message: "Invalid credentials" });
   }
 });
 
@@ -98,3 +124,8 @@ app.post("/upload", upload.array("myFiles"), (req, res) => {
     res.status(400).send({ error: error.message });
   }
 });
+
+// Start the server
+// app.listen(7000, () => {
+//   console.log("Server running on port 7000");
+// });
